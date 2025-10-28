@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>miArgentina – Mock local</title>
+  <style>
+    :root{
+      /* Resolución base de las capturas */
+      --screen-w: 1170px;
+      --screen-h: 2532px;
+
+      /* HOME: tile Documentos */
+      --doc-top: 1500px;
+      --doc-left: 56px;
+      --doc-width: 330px;
+      --doc-height: 330px;
+
+      /* Back (invisible) y botón menú en HOME (misma posición) */
+      --back-top: 28px;
+      --back-left: 24px;
+      --back-size: 100px;
+
+      /* DOCUMENTOS: botón "Ver DNI Digital" */
+      --dni-top: 450px;
+      --dni-left: 130px;
+      --dni-width: 910px;
+      --dni-height: 200px;
+
+      /* MIDOC: botón ancho completo que alterna midoc <-> midocqr */
+      --midocqr-top: 1400px;
+      --midocqr-height: 220px;
+
+      /* DOCINFO: botón por encima del de midocqr */
+      --docinfo-top: 1200px;  /* debe ser menor que --midocqr-top para quedar arriba */
+      --docinfo-height: 100px;
+
+      /* Flip card (visible en MIDOC y MIDOCQR) */
+      --flip-top: 350px;
+      --flip-left: 85px;
+      --flip-width: 1000px;
+      --flip-height: 630px;
+    }
+
+    html, body { height: 100%; margin: 0; overflow: hidden; background: #111; display: grid; place-items: center; }
+    #frame { display: grid; place-items: center; transform-origin: top left; }
+    .phone { position: relative; width: var(--screen-w); height: var(--screen-h); overflow: hidden; }
+    .phone img.bg { width: var(--screen-w); height: var(--screen-h); display: block; pointer-events: none; }
+
+    /* Hitboxes invisibles */
+    a.hit { position: absolute; display: none; background: rgba(0,0,0,0); cursor: pointer; z-index: 5; }
+    #hit-docs{ top: var(--doc-top); left: var(--doc-left); width: var(--doc-width); height: var(--doc-height); }
+    #hit-dni{ top: var(--dni-top); left: var(--dni-left); width: var(--dni-width); height: var(--dni-height); }
+    #hit-menu { top: var(--back-top); left: var(--back-left); width: var(--back-size); height: var(--back-size); z-index: 8; }
+    #hit-midocqr{ top: var(--midocqr-top); left: 0; width: var(--screen-w); height: var(--midocqr-height); z-index: 8; }
+    #hit-docinfo{ top: var(--docinfo-top); left: 0; width: var(--screen-w); height: var(--docinfo-height); z-index: 9; }
+
+    /* Back invisible */
+    #backBtn { position: absolute; top: var(--back-top); left: var(--back-left); width: var(--back-size); height: var(--back-size); border-radius: 999px; display: none; background: rgba(0,0,0,0); cursor: pointer; z-index: 10; }
+
+    /* ===== Flip card ===== */
+    .flip-wrap { position: absolute; top: var(--flip-top); left: var(--flip-left); width: var(--flip-width); height: var(--flip-height); display: none; perspective: 1200px; z-index: 6; }
+    .flip-card { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 600ms ease; cursor: pointer; }
+    .flip-card.is-flipped { transform: rotateY(-180deg); }
+    .flip-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 16px; overflow: hidden; }
+    .flip-face img, .flip-face { width: 100%; height: 100%; object-fit: cover; }
+    .flip-face.back { transform: rotateY(180deg); }
+
+    /* DEBUG opcional: mostrar bordes de hitboxes */
+    /* a.hit{ outline: 2px dashed rgba(255,255,255,.25); } */
+  </style>
+  <script>
+    let current = 1; // 1=home, 2=documentos, 3=midoc, 4=3rayas, 5=midocqr, 6=docinfo
+    let prevDocInfoFrom = 3; // para volver a la vista correcta desde docinfo
+
+    function fitMock() {
+      const root = getComputedStyle(document.documentElement);
+      const W = parseFloat(root.getPropertyValue('--screen-w'));
+      const H = parseFloat(root.getPropertyValue('--screen-h'));
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const scale = Math.min(vw / W, vh / H);
+      const frame = document.getElementById('frame');
+      if (!frame) return;
+      frame.style.width = W + 'px';
+      frame.style.height = H + 'px';
+      frame.style.transform = 'scale(' + scale + ')';
+    }
+
+    window.addEventListener('resize', fitMock);
+    window.addEventListener('orientationchange', fitMock);
+
+    function showHome(){
+      current = 1;
+      toggleImages('home');
+      toggleHits({docs:true, menu:true});
+      setBack(false);
+      showFlip(false);
+    }
+
+    function showDocumentos(){
+      current = 2;
+      toggleImages('documentos');
+      toggleHits({dni:true});
+      setBack(true);
+      showFlip(false);
+    }
+
+    function showMiDoc(){
+      current = 3;
+      toggleImages('midoc');
+      toggleHits({midocqr:true, docinfo:true});
+      setBack(true);
+      showFlip(true);
+      resetFlip();
+    }
+
+    function show3rayas(){
+      current = 4;
+      toggleImages('3rayas');
+      toggleHits({});
+      setBack(true);
+      showFlip(false);
+    }
+
+    function showMiDocQR(){
+      if (current === 5) { showMiDoc(); return; }
+      current = 5;
+      toggleImages('midocqr');
+      toggleHits({midocqr:true, docinfo:true});
+      setBack(true);
+      showFlip(true);
+    }
+
+    function showDocInfo(){
+      prevDocInfoFrom = current; // 3 o 5
+      current = 6;
+      toggleImages('docinfo');
+      toggleHits({});
+      setBack(true);
+      showFlip(false);
+    }
+
+    function goBack(){
+      if (current === 6) { // docinfo
+        if (prevDocInfoFrom === 5) showMiDocQR(); else showMiDoc();
+      }
+      else if (current === 5) { showMiDoc(); }
+      else if (current === 4) { showHome(); }
+      else if (current === 3) { showDocumentos(); }
+      else if (current === 2) { showHome(); }
+    }
+
+    function toggleImages(name){
+      const ids = ['img-home','img-documentos','img-midoc','img-3rayas','img-midocqr','img-docinfo'];
+      ids.forEach(id=>{
+        const el = document.getElementById(id);
+        if (el) el.style.display = id.includes(name) ? 'block' : 'none';
+      });
+    }
+
+    function toggleHits(visible){
+      const all = ['hit-docs','hit-dni','hit-menu','hit-midocqr','hit-docinfo'];
+      all.forEach(id=>{
+        const el = document.getElementById(id);
+        if (!el) return;
+        const key = id.replace('hit-','');
+        el.style.display = visible[key] ? 'block' : 'none';
+      });
+    }
+
+    function setBack(show){
+      const back = document.getElementById('backBtn');
+      if (back) back.style.display = show ? 'block' : 'none';
+    }
+
+    function showFlip(show){
+      const fw = document.getElementById('flipWrap');
+      if (fw) fw.style.display = show ? 'block' : 'none';
+    }
+
+    function resetFlip(){
+      const fc = document.getElementById('flipCard');
+      if (fc) fc.classList.remove('is-flipped');
+    }
+
+    function init(){
+      fitMock();
+      showHome();
+      const fc = document.getElementById('flipCard');
+      const fw = document.getElementById('flipWrap');
+      if (fc && fw){
+        const toggle = ()=> fc.classList.toggle('is-flipped');
+        fw.addEventListener('click', toggle);
+        fc.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); toggle(); } });
+      }
+    }
+  </script>
+</head>
+<body onload="init()">
+  <div id="frame">
+    <main class="phone">
+      <!-- Imágenes base -->
+      <img id="img-home" class="bg" src="home.png" alt="Home" style="display:none;" />
+      <img id="img-documentos" class="bg" src="documentos.png" alt="Documentos" style="display:none;" />
+      <img id="img-midoc" class="bg" src="midoc.png" alt="Mi DNI Digital" style="display:none;" />
+
+      <!-- Flip card (visible en MIDOC y MIDOCQR) -->
+      <div id="flipWrap" class="flip-wrap" aria-label="Documento - flip card">
+        <div id="flipCard" class="flip-card" role="button" tabindex="0">
+          <img class="flip-face front" src="docfrente.png" alt="Documento - frente" />
+          <img class="flip-face back" src="docdorso.png" alt="Documento - dorso" />
+        </div>
+      </div>
+
+      <img id="img-3rayas" class="bg" src="3rayas.png" alt="Menú 3 rayas" style="display:none;" />
+      <img id="img-midocqr" class="bg" src="midocqr.png" alt="Mi DNI Digital QR" style="display:none;" />
+      <img id="img-docinfo" class="bg" src="docinfo.png" alt="Información del documento" style="display:none;" />
+
+      <!-- Hitboxes invisibles -->
+      <a id="hit-docs" class="hit" onclick="showDocumentos()" aria-label="Abrir Documentos"></a>
+      <a id="hit-dni" class="hit" onclick="showMiDoc()" aria-label="Ver DNI Digital"></a>
+      <a id="hit-menu" class="hit" onclick="show3rayas()" title="Abrir 3 rayas" aria-label="Abrir 3 rayas"></a>
+      <a id="hit-midocqr" class="hit" onclick="showMiDocQR()" title="Abrir o cerrar Mi DNI QR" aria-label="Abrir o cerrar Mi DNI QR"></a>
+      <a id="hit-docinfo" class="hit" onclick="showDocInfo()" title="Información del documento" aria-label="Información del documento"></a>
+
+      <!-- Back invisible -->
+      <div id="backBtn" onclick="goBack()" title="Volver" aria-label="Volver"></div>
+    </main>
+  </div>
+</body>
+</html>
